@@ -1118,6 +1118,10 @@
       u => 'https://corsproxy.io/?' + encodeURIComponent(u),
       u => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u),
     ];
+    /** 프록시 1회 시도 타임아웃(ms). Promise.any로 3개 동시 시도 → 느린 순차 대기 제거 */
+    const PROXY_TIMEOUT_MS = 8000;
+    /** RSS 피드 동시 요청 수 (전체 순차 대비 대기 시간 단축) */
+    const FEED_CONCURRENCY = 5;
 
     const ALERT_KEYWORDS = {
       '금리': ['기준금리', '금리 인상', '금리 인하', '금리 동결', 'interest rate', 'rate hike', 'rate cut', 'fed funds', 'fomc'],
@@ -1138,13 +1142,13 @@
     };
 
     const FEEDS = [
-      { name: 'Reuters', url: 'https://www.reutersagency.com/feed/?taxonomy=best-sectors&post_type=best', cat: 'global', lang: 'en' },
+      /* Reuters agency URL 404 · IMF /en/News/rss 는 HTML(SPA)만 반환 → 실제 XML 피드로 교체 */
+      { name: 'Guardian Business', url: 'https://www.theguardian.com/uk/business/rss', cat: 'global', lang: 'en' },
       { name: 'Bloomberg', url: 'https://feeds.bloomberg.com/markets/news.rss', cat: 'global', lang: 'en' },
-      { name: 'WSJ Economy', url: 'https://feeds.a.dj.com/rss/RSSEconomy.xml', cat: 'global', lang: 'en' },
       { name: 'CNBC Economy', url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258', cat: 'global', lang: 'en' },
       { name: 'Fed Press', url: 'https://www.federalreserve.gov/feeds/press_all.xml', cat: 'central_bank', lang: 'en' },
       { name: 'ECB Press', url: 'https://www.ecb.europa.eu/rss/press.html', cat: 'central_bank', lang: 'en' },
-      { name: 'IMF News', url: 'https://www.imf.org/en/News/rss?language=eng', cat: 'central_bank', lang: 'en' },
+      { name: 'UN News', url: 'https://news.un.org/feed/subscribe/en/news/all/rss.xml', cat: 'central_bank', lang: 'en' },
       { name: 'VoxEU', url: 'https://cepr.org/rss/vox-content', cat: 'research', lang: 'en' },
       { name: 'Atlanta Fed', url: 'https://www.atlantafed.org/RSS/macroblog.aspx', cat: 'research', lang: 'en' },
       { name: 'NY Fed', url: 'https://libertystreeteconomics.newyorkfed.org/feed/', cat: 'research', lang: 'en' },
@@ -1153,8 +1157,8 @@
       { name: '한국경제 국제', url: 'https://www.hankyung.com/feed/international', cat: 'domestic', lang: 'ko' },
       { name: '매일경제', url: 'https://www.mk.co.kr/rss/30100041/', cat: 'domestic', lang: 'ko' },
       { name: '연합뉴스 경제', url: 'https://www.yna.co.kr/rss/economy.xml', cat: 'domestic', lang: 'ko' },
-      { name: '이투데이 글로벌', url: 'https://rss.etoday.co.kr/rss/global_economy.xml', cat: 'domestic', lang: 'ko' },
-      { name: '이투데이 증권', url: 'https://rss.etoday.co.kr/rss/stock.xml', cat: 'domestic', lang: 'ko' },
+      { name: '이투데이 글로벌', url: 'https://rss.etoday.co.kr/eto/global_news.xml', cat: 'domestic', lang: 'ko' },
+      { name: '이투데이 증권', url: 'https://rss.etoday.co.kr/eto/market_news.xml', cat: 'domestic', lang: 'ko' },
     ];
 
     let allArticles = [];
@@ -1194,21 +1198,25 @@
     }
 
     async function fetchWithFallback(url) {
-      for (let i = 0; i < PROXIES.length; i++) {
-        try {
-          const proxyUrl = PROXIES[i](url);
-          const resp = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
-          if (!resp.ok) continue;
-          const text = await resp.text();
-          if (text.length < 50) continue;
-          return text;
-        } catch { continue; }
+      const tryProxy = async (buildUrl) => {
+        const proxyUrl = buildUrl(url);
+        const resp = await fetch(proxyUrl, { signal: AbortSignal.timeout(PROXY_TIMEOUT_MS) });
+        if (!resp.ok) throw new Error('http');
+        const text = await resp.text();
+        if (text.length < 50) throw new Error('short');
+        return text;
+      };
+      try {
+        return await Promise.any(PROXIES.map(b => tryProxy(b)));
+      } catch {
+        return null;
       }
-      return null;
     }
 
     function parseRSS(xmlText, feed) {
       try {
+        const t = (xmlText || '').trim();
+        if (!/<rss[\s>]|<feed[\s>]/i.test(t)) return [];
         const parser = new DOMParser();
         const xml = parser.parseFromString(xmlText, 'text/xml');
         if (xml.querySelector('parsererror')) return [];
@@ -1265,25 +1273,34 @@
       const arts = [];
       let srcOk = 0;
 
-      for (let i = 0; i < FEEDS.length; i++) {
-        const feed = FEEDS[i];
-        showProgress(i + 1, FEEDS.length, feed.name);
-        const text = await fetchWithFallback(feed.url);
-        if (text) {
-          const items = parseRSS(text, feed);
-          if (items.length > 0) {
-            srcOk++;
-            for (const a of items) {
-              const key = a.title.slice(0, 50);
-              if (!seen.has(key)) { seen.add(key); arts.push(a); }
+      let wi = 0;
+      let completed = 0;
+      async function feedWorker() {
+        while (true) {
+          const i = wi++;
+          if (i >= FEEDS.length) break;
+          const feed = FEEDS[i];
+          const text = await fetchWithFallback(feed.url);
+          if (text) {
+            const items = parseRSS(text, feed);
+            if (items.length > 0) {
+              srcOk++;
+              for (const a of items) {
+                const key = a.title.slice(0, 50);
+                if (!seen.has(key)) { seen.add(key); arts.push(a); }
+              }
+            } else {
+              failedSources.push(feed.name);
             }
           } else {
             failedSources.push(feed.name);
           }
-        } else {
-          failedSources.push(feed.name);
+          completed++;
+          showProgress(completed, FEEDS.length, feed.name);
         }
       }
+      const nWorkers = Math.min(FEED_CONCURRENCY, FEEDS.length);
+      await Promise.all(Array.from({ length: nWorkers }, () => feedWorker()));
 
       arts.sort((a, b) => {
         const da = a.pubDate ? new Date(a.pubDate) : new Date(a.collected);
