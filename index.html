@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>📊 매크로 뉴스 모니터</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#f8f9fa;--bg2:#fff;--bg3:#f1f3f5;
+  --tx:#212529;--tx2:#495057;--tx3:#868e96;
+  --bd:#dee2e6;--bd2:#ced4da;
+  --accent:#3b82f6;--accent2:#dbeafe;
+  --red:#ef4444;--red2:#fef2f2;
+  --green:#22c55e;--green2:#f0fdf4;
+  --amber:#f59e0b;--amber2:#fffbeb;
+  --purple:#8b5cf6;--purple2:#f5f3ff;
+  --teal:#14b8a6;--teal2:#f0fdfa;
+}
+@media(prefers-color-scheme:dark){
+  :root{
+    --bg:#111;--bg2:#1a1a1a;--bg3:#222;
+    --tx:#e5e5e5;--tx2:#a3a3a3;--tx3:#737373;
+    --bd:#333;--bd2:#444;
+    --accent:#60a5fa;--accent2:#1e3a5f;
+    --red:#f87171;--red2:#3b1111;
+    --green:#4ade80;--green2:#0a2e14;
+    --amber:#fbbf24;--amber2:#3b2a06;
+    --purple:#a78bfa;--purple2:#1e1536;
+    --teal:#2dd4bf;--teal2:#0a2925;
+  }
+}
+body{background:var(--bg);color:var(--tx);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.5}
+.container{max-width:1100px;margin:0 auto;padding:16px}
+header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px}
+header h1{font-size:22px;font-weight:600}
+header .meta{font-size:13px;color:var(--tx3)}
+.controls{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
+.controls select,.controls input{padding:7px 12px;border:1px solid var(--bd);border-radius:8px;background:var(--bg2);color:var(--tx);font-size:13px;outline:none}
+.controls select:focus,.controls input:focus{border-color:var(--accent)}
+.controls input{flex:1;min-width:160px}
+.btn{padding:7px 16px;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:500;transition:opacity .15s}
+.btn:hover{opacity:.85}
+.btn-primary{background:var(--accent);color:#fff}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px}
+.stat{background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:14px 16px;text-align:center}
+.stat .num{font-size:24px;font-weight:700;color:var(--accent)}
+.stat .label{font-size:12px;color:var(--tx3);margin-top:2px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--bd);margin-bottom:12px}
+.tab{padding:8px 16px;font-size:13px;font-weight:500;color:var(--tx3);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+.tab:hover{color:var(--tx2)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.panel{display:none}
+.panel.active{display:block}
+.card{background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:14px 16px;margin-bottom:10px;transition:border-color .15s}
+.card:hover{border-color:var(--bd2)}
+.card-header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px}
+.card-source{font-size:12px;color:var(--tx3)}
+.card-title{font-size:14px;font-weight:500;margin-bottom:4px}
+.card-title a{color:var(--tx);text-decoration:none}
+.card-title a:hover{color:var(--accent);text-decoration:underline}
+.card-summary{font-size:12px;color:var(--tx2);margin-bottom:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tags{display:flex;flex-wrap:wrap;gap:4px}
+.tag{font-size:11px;padding:2px 8px;border-radius:20px;font-weight:500}
+.tag-interest{background:var(--red2);color:var(--red)}
+.tag-fx{background:var(--amber2);color:var(--amber)}
+.tag-inflation{background:var(--purple2);color:var(--purple)}
+.tag-employment{background:var(--green2);color:var(--green)}
+.tag-growth{background:var(--accent2);color:var(--accent)}
+.tag-policy{background:var(--teal2);color:var(--teal)}
+.tag-trade{background:var(--amber2);color:var(--amber)}
+.tag-bond{background:var(--purple2);color:var(--purple)}
+.tag-commodity{background:var(--green2);color:var(--green)}
+.loading{text-align:center;padding:40px;color:var(--tx3);font-size:14px}
+.loading .spinner{display:inline-block;width:20px;height:20px;border:2px solid var(--bd);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;margin-right:8px;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+.empty{text-align:center;padding:40px;color:var(--tx3)}
+.progress{margin-bottom:16px;display:none}
+.progress-bar{height:4px;background:var(--bg3);border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .3s}
+.progress-text{font-size:12px;color:var(--tx3);margin-top:4px;text-align:center}
+.chart-bar{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.chart-bar .bar-label{font-size:12px;color:var(--tx2);width:140px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chart-bar .bar-track{flex:1;height:20px;background:var(--bg3);border-radius:4px;overflow:hidden}
+.chart-bar .bar-fill{height:100%;border-radius:4px;transition:width .3s}
+.chart-bar .bar-count{font-size:12px;color:var(--tx3);width:30px}
+.error-banner{background:var(--amber2);color:var(--amber);padding:10px 16px;border-radius:8px;font-size:13px;margin-bottom:12px;display:none}
+footer{text-align:center;padding:24px;font-size:12px;color:var(--tx3)}
+@media(max-width:600px){
+  .controls{flex-direction:column}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  header{flex-direction:column;align-items:flex-start}
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>📊 매크로 뉴스 모니터</h1>
+    <div class="meta" id="statusText">준비 중...</div>
+  </header>
+
+  <div class="error-banner" id="errorBanner"></div>
+
+  <div class="progress" id="progressWrap">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+    <div class="progress-text" id="progressText">수집 시작...</div>
+  </div>
+
+  <div class="controls">
+    <select id="filterCat">
+      <option value="all">전체 카테고리</option>
+      <option value="global">🌍 글로벌</option>
+      <option value="domestic">🇰🇷 국내</option>
+      <option value="central_bank">🏛️ 중앙은행</option>
+      <option value="research">📚 리서치</option>
+    </select>
+    <select id="filterLang">
+      <option value="all">전체 언어</option>
+      <option value="en">🇺🇸 영어</option>
+      <option value="ko">🇰🇷 한국어</option>
+    </select>
+    <select id="filterAlert">
+      <option value="all">전체 기사</option>
+      <option value="alert">🔔 알림 매칭만</option>
+    </select>
+    <input type="text" id="searchInput" placeholder="키워드 검색 (예: FOMC, 환율, GDP...)">
+    <button class="btn btn-primary" onclick="refreshAll()">🔄 새로고침</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="num" id="statTotal">-</div><div class="label">전체 기사</div></div>
+    <div class="stat"><div class="num" id="statAlert">-</div><div class="label">🔔 알림 매칭</div></div>
+    <div class="stat"><div class="num" id="statSources">-</div><div class="label">활성 소스</div></div>
+    <div class="stat"><div class="num" id="statHot">-</div><div class="label">🔥 핫 토픽</div></div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="feed">📰 뉴스 피드</div>
+    <div class="tab" data-tab="alerts">🔔 알림</div>
+    <div class="tab" data-tab="stats">📊 통계</div>
+  </div>
+
+  <div class="panel active" id="panel-feed">
+    <div class="loading" id="feedLoading"><span class="spinner"></span>뉴스를 수집하고 있습니다...</div>
+    <div id="feedList"></div>
+  </div>
+
+  <div class="panel" id="panel-alerts">
+    <div id="alertList"></div>
+  </div>
+
+  <div class="panel" id="panel-stats">
+    <h3 style="font-size:15px;font-weight:600;margin-bottom:12px">소스별 기사 수</h3>
+    <div id="chartSources"></div>
+    <h3 style="font-size:15px;font-weight:600;margin:20px 0 12px">키워드 카테고리별 매칭</h3>
+    <div id="chartKeywords"></div>
+  </div>
+
+  <footer>매크로 뉴스 모니터 · RSS 기반 실시간 수집 · <span id="lastUpdate">-</span> 기준</footer>
+</div>
+
+<script>
+const PROXIES = [
+  u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
+  u => 'https://corsproxy.io/?' + encodeURIComponent(u),
+  u => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u),
+];
+
+const ALERT_KEYWORDS = {
+  '금리':['기준금리','금리 인상','금리 인하','금리 동결','interest rate','rate hike','rate cut','fed funds','fomc'],
+  '환율':['환율','달러','원화','usd/krw','dollar','forex','dxy','yen','euro'],
+  '인플레이션':['cpi','pce','인플레','물가','inflation','consumer price','core inflation','디플레'],
+  '고용':['고용','실업률','비농업','nonfarm','unemployment','jobless','payroll','employment'],
+  '성장':['gdp','경제성장','pmi','ism','산업생산','retail sales','소비자신뢰','경기침체','recession'],
+  '통화정책':['양적긴축','qt','양적완화','qe','테이퍼링','taper','ecb','boj','bok','금통위'],
+  '무역':['관세','tariff','무역전쟁','trade war','수출','수입','무역수지','sanctions'],
+  '채권':['국채','treasury','yield','수익률곡선','yield curve','inversion','채권'],
+  '원자재':['유가','oil','wti','brent','금값','gold','copper','commodity']
+};
+
+const TAG_CLASS = {
+  '금리':'tag-interest','환율':'tag-fx','인플레이션':'tag-inflation',
+  '고용':'tag-employment','성장':'tag-growth','통화정책':'tag-policy',
+  '무역':'tag-trade','채권':'tag-bond','원자재':'tag-commodity'
+};
+
+const FEEDS = [
+  {name:'Reuters',url:'https://www.reutersagency.com/feed/?taxonomy=best-sectors&post_type=best',cat:'global',lang:'en'},
+  {name:'Bloomberg',url:'https://feeds.bloomberg.com/markets/news.rss',cat:'global',lang:'en'},
+  {name:'WSJ Economy',url:'https://feeds.a.dj.com/rss/RSSEconomy.xml',cat:'global',lang:'en'},
+  {name:'CNBC Economy',url:'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258',cat:'global',lang:'en'},
+  {name:'Fed Press',url:'https://www.federalreserve.gov/feeds/press_all.xml',cat:'central_bank',lang:'en'},
+  {name:'ECB Press',url:'https://www.ecb.europa.eu/rss/press.html',cat:'central_bank',lang:'en'},
+  {name:'IMF News',url:'https://www.imf.org/en/News/rss?language=eng',cat:'central_bank',lang:'en'},
+  {name:'VoxEU',url:'https://cepr.org/rss/vox-content',cat:'research',lang:'en'},
+  {name:'Atlanta Fed',url:'https://www.atlantafed.org/RSS/macroblog.aspx',cat:'research',lang:'en'},
+  {name:'NY Fed',url:'https://libertystreeteconomics.newyorkfed.org/feed/',cat:'research',lang:'en'},
+  {name:'한국경제 경제',url:'https://www.hankyung.com/feed/economy',cat:'domestic',lang:'ko'},
+  {name:'한국경제 증권',url:'https://www.hankyung.com/feed/finance',cat:'domestic',lang:'ko'},
+  {name:'한국경제 국제',url:'https://www.hankyung.com/feed/international',cat:'domestic',lang:'ko'},
+  {name:'매일경제',url:'https://www.mk.co.kr/rss/30100041/',cat:'domestic',lang:'ko'},
+  {name:'연합뉴스 경제',url:'https://www.yna.co.kr/rss/economy.xml',cat:'domestic',lang:'ko'},
+  {name:'이투데이 글로벌',url:'https://rss.etoday.co.kr/rss/global_economy.xml',cat:'domestic',lang:'ko'},
+  {name:'이투데이 증권',url:'https://rss.etoday.co.kr/rss/stock.xml',cat:'domestic',lang:'ko'},
+];
+
+let allArticles = [];
+let activeSources = 0;
+let failedSources = [];
+
+function matchKeywords(title, summary) {
+  const text = ((title||'') + ' ' + (summary||'')).toLowerCase();
+  const matched = [];
+  const cats = new Set();
+  for (const [cat, kws] of Object.entries(ALERT_KEYWORDS)) {
+    for (const kw of kws) {
+      if (text.includes(kw.toLowerCase())) { matched.push(kw); cats.add(cat); }
+    }
+  }
+  return { keywords: [...new Set(matched)], categories: [...cats] };
+}
+
+function stripHtml(s) { return s ? s.replace(/<[^>]+>/g, '').replace(/&[^;]+;/g, ' ').trim() : ''; }
+
+function timeAgo(dateStr) {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    const diff = (Date.now() - d.getTime()) / 1000;
+    if (diff < 0 || diff > 604800) return '';
+    if (diff < 60) return '방금';
+    if (diff < 3600) return Math.floor(diff / 60) + '분 전';
+    if (diff < 86400) return Math.floor(diff / 3600) + '시간 전';
+    return Math.floor(diff / 86400) + '일 전';
+  } catch { return ''; }
+}
+
+function catEmoji(cat) {
+  return { global: '🌍', domestic: '🇰🇷', central_bank: '🏛️', research: '📚' }[cat] || '📄';
+}
+
+async function fetchWithFallback(url) {
+  for (let i = 0; i < PROXIES.length; i++) {
+    try {
+      const proxyUrl = PROXIES[i](url);
+      const resp = await fetch(proxyUrl, { signal: AbortSignal.timeout(10000) });
+      if (!resp.ok) continue;
+      const text = await resp.text();
+      if (text.length < 50) continue;
+      return text;
+    } catch { continue; }
+  }
+  return null;
+}
+
+function parseRSS(xmlText, feed) {
+  try {
+    const parser = new DOMParser();
+    const xml = parser.parseFromString(xmlText, 'text/xml');
+    if (xml.querySelector('parsererror')) return [];
+    const items = [...xml.querySelectorAll('item'), ...xml.querySelectorAll('entry')];
+    return items.slice(0, 20).map(item => {
+      const title = (item.querySelector('title')?.textContent || '').trim();
+      let link = '';
+      const linkEl = item.querySelector('link');
+      if (linkEl) {
+        link = linkEl.getAttribute('href') || linkEl.textContent || '';
+        link = link.trim();
+      }
+      const pubDate = item.querySelector('pubDate')?.textContent
+        || item.querySelector('published')?.textContent
+        || item.querySelector('updated')?.textContent || '';
+      const desc = stripHtml(
+        item.querySelector('description')?.textContent
+        || item.querySelector('summary')?.textContent
+        || item.querySelector('content')?.textContent || ''
+      ).slice(0, 300);
+      if (!title) return null;
+      const m = matchKeywords(title, desc);
+      return {
+        title, link, pubDate: pubDate.trim(), summary: desc,
+        source: feed.name, category: feed.cat, lang: feed.lang,
+        matchedKeywords: m.keywords, matchedCategories: m.categories,
+        collected: new Date().toISOString()
+      };
+    }).filter(Boolean);
+  } catch { return []; }
+}
+
+function showProgress(current, total, feedName) {
+  const wrap = document.getElementById('progressWrap');
+  wrap.style.display = 'block';
+  const pct = Math.round((current / total) * 100);
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressText').textContent =
+    `${current}/${total} 수집 중... (${feedName})`;
+}
+
+function hideProgress() {
+  document.getElementById('progressWrap').style.display = 'none';
+}
+
+async function collectAll() {
+  const loadEl = document.getElementById('feedLoading');
+  const errorEl = document.getElementById('errorBanner');
+  loadEl.style.display = 'block';
+  errorEl.style.display = 'none';
+  document.getElementById('statusText').textContent = '수집 중...';
+  failedSources = [];
+
+  const seen = new Set();
+  const arts = [];
+  let srcOk = 0;
+
+  for (let i = 0; i < FEEDS.length; i++) {
+    const feed = FEEDS[i];
+    showProgress(i + 1, FEEDS.length, feed.name);
+    const text = await fetchWithFallback(feed.url);
+    if (text) {
+      const items = parseRSS(text, feed);
+      if (items.length > 0) {
+        srcOk++;
+        for (const a of items) {
+          const key = a.title.slice(0, 50);
+          if (!seen.has(key)) { seen.add(key); arts.push(a); }
+        }
+      } else {
+        failedSources.push(feed.name);
+      }
+    } else {
+      failedSources.push(feed.name);
+    }
+  }
+
+  arts.sort((a, b) => {
+    const da = a.pubDate ? new Date(a.pubDate) : new Date(a.collected);
+    const db = b.pubDate ? new Date(b.pubDate) : new Date(b.collected);
+    return db - da;
+  });
+
+  allArticles = arts;
+  activeSources = srcOk;
+  loadEl.style.display = 'none';
+  hideProgress();
+
+  const now = new Date();
+  document.getElementById('statusText').textContent =
+    `${srcOk}/${FEEDS.length} 소스 · ${arts.length}건`;
+  document.getElementById('lastUpdate').textContent =
+    now.toLocaleString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+  if (failedSources.length > 0 && srcOk > 0) {
+    errorEl.textContent = `⚠️ 일부 소스 연결 실패 (${failedSources.length}건): ${failedSources.slice(0, 5).join(', ')}${failedSources.length > 5 ? '...' : ''}`;
+    errorEl.style.display = 'block';
+  } else if (srcOk === 0) {
+    errorEl.textContent = '⚠️ 모든 소스 연결에 실패했습니다. 잠시 후 다시 시도해주세요.';
+    errorEl.style.display = 'block';
+  }
+
+  renderAll();
+}
+
+function getFiltered() {
+  const cat = document.getElementById('filterCat').value;
+  const lang = document.getElementById('filterLang').value;
+  const alert = document.getElementById('filterAlert').value;
+  const q = document.getElementById('searchInput').value.toLowerCase().trim();
+  return allArticles.filter(a => {
+    if (cat !== 'all' && a.category !== cat) return false;
+    if (lang !== 'all' && a.lang !== lang) return false;
+    if (alert === 'alert' && a.matchedKeywords.length === 0) return false;
+    if (q && !(a.title.toLowerCase().includes(q) || (a.summary || '').toLowerCase().includes(q)
+      || a.matchedKeywords.some(k => k.toLowerCase().includes(q)))) return false;
+    return true;
+  });
+}
+
+function renderCard(a) {
+  const tags = a.matchedCategories.map(c =>
+    `<span class="tag ${TAG_CLASS[c] || ''}">${c}</span>`).join('');
+  const time = timeAgo(a.pubDate || a.collected);
+  const kws = a.matchedKeywords.length > 0
+    ? `<div style="font-size:11px;color:var(--tx3);margin-top:4px">🏷️ ${a.matchedKeywords.slice(0, 5).join(', ')}</div>` : '';
+  const linkAttr = a.link ? ` href="${a.link}" target="_blank" rel="noopener"` : '';
+  return `<div class="card">
+    <div class="card-header">
+      <div class="card-source">${catEmoji(a.category)} ${a.source}${time ? ' · ' + time : ''}</div>
+      <div class="tags">${tags}</div>
+    </div>
+    <div class="card-title"><a${linkAttr}>${a.title}</a></div>
+    ${a.summary ? `<div class="card-summary">${a.summary}</div>` : ''}
+    ${kws}
+  </div>`;
+}
+
+function renderFeed() {
+  const filtered = getFiltered();
+  const el = document.getElementById('feedList');
+  if (filtered.length === 0) {
+    el.innerHTML = '<div class="empty">조건에 맞는 기사가 없습니다.</div>';
+    return;
+  }
+  el.innerHTML = filtered.slice(0, 80).map(renderCard).join('');
+}
+
+function renderAlerts() {
+  const alerted = allArticles.filter(a => a.matchedKeywords.length > 0);
+  const el = document.getElementById('alertList');
+  if (alerted.length === 0) {
+    el.innerHTML = '<div class="empty">매칭된 알림 기사가 없습니다.</div>';
+    return;
+  }
+  el.innerHTML = alerted.slice(0, 50).map(renderCard).join('');
+}
+
+function renderStats() {
+  const filtered = getFiltered();
+  const srcMap = {};
+  const kwMap = {};
+  for (const a of filtered) {
+    srcMap[a.source] = (srcMap[a.source] || 0) + 1;
+    for (const c of a.matchedCategories) kwMap[c] = (kwMap[c] || 0) + 1;
+  }
+  const srcSorted = Object.entries(srcMap).sort((a, b) => b[1] - a[1]);
+  const kwSorted = Object.entries(kwMap).sort((a, b) => b[1] - a[1]);
+  const maxSrc = srcSorted[0]?.[1] || 1;
+  const maxKw = kwSorted[0]?.[1] || 1;
+
+  document.getElementById('chartSources').innerHTML = srcSorted.length > 0
+    ? srcSorted.map(([name, cnt]) =>
+      `<div class="chart-bar">
+        <div class="bar-label">${name}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${(cnt / maxSrc * 100).toFixed(0)}%;background:var(--accent)"></div></div>
+        <div class="bar-count">${cnt}</div>
+      </div>`).join('')
+    : '<div class="empty">데이터 없음</div>';
+
+  document.getElementById('chartKeywords').innerHTML = kwSorted.length > 0
+    ? kwSorted.map(([name, cnt]) =>
+      `<div class="chart-bar">
+        <div class="bar-label">${name}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${(cnt / maxKw * 100).toFixed(0)}%;background:var(--purple)"></div></div>
+        <div class="bar-count">${cnt}</div>
+      </div>`).join('')
+    : '<div class="empty">매칭된 키워드 없음</div>';
+}
+
+function updateStats() {
+  const filtered = getFiltered();
+  const alerted = filtered.filter(a => a.matchedKeywords.length > 0);
+  document.getElementById('statTotal').textContent = filtered.length;
+  document.getElementById('statAlert').textContent = alerted.length;
+  document.getElementById('statSources').textContent = activeSources;
+  const catCount = {};
+  for (const a of alerted) for (const c of a.matchedCategories) catCount[c] = (catCount[c] || 0) + 1;
+  const top = Object.entries(catCount).sort((a, b) => b[1] - a[1])[0];
+  document.getElementById('statHot').textContent = top ? top[0] : '-';
+}
+
+function renderAll() {
+  updateStats();
+  renderFeed();
+  renderAlerts();
+  renderStats();
+}
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+['filterCat', 'filterLang', 'filterAlert'].forEach(id =>
+  document.getElementById(id).addEventListener('change', renderAll));
+document.getElementById('searchInput').addEventListener('input', renderAll);
+
+function refreshAll() { collectAll(); }
+
+collectAll();
+setInterval(collectAll, 300000);
+</script>
+</body>
+</html>
